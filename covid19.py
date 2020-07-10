@@ -170,7 +170,7 @@ def sampleMCMC(data, s0, i0):
 #        # storing MCMC returns in dictionary
 #        mcmcSamples.update({state: [thisMCMC['beta'], thisMCMC['gamma']]})
 #    except Exception as e:
-#        print(state + 'failed')
+#        print(state + ' failed')
 #        continue
 
 #mcmcTable = createTableFromData(mcmcSamples)
@@ -235,24 +235,32 @@ meansPlot = (Plot.plot('means', samplesMeans, 'beta', 'gamma').
 # used to generate datasets but only to subset them, I must simulate SIR for every
 # state that we have parameter values for and subset the resulting table with oneClick
 
-
-
+# converting means to dataframe for use in simulation
+samplesMeansDf = tableToDataFrame(samplesMeans)
+# for plotting 600 days worth of simulation
+simList = []
+# loop through states with valid params and execute SIR simulation, append to validSims
+for state in np.unique(samplesMeansDf['state']):
+    QueryScope.addParam('state', state)
+    thisInit = [statePops[state]-10, 10, 0]
+    thisParams = (float(samplesMeansDf[samplesMeansDf['state'] == state]['beta']),
+        float(samplesMeansDf[samplesMeansDf['state'] == state]['gamma']))
+    # 600 days worth of simulation and append
+    thisSim = simulateSIR(thisInit, thisParams, 600)
+    thisSim['state'] = state
+    thisSim['time'] = thisSim.index
+    simList.append(thisSim)
+# convert dataframe of simulations back to table
+simTable = dataFrameToTable(pd.concat(simList))
 
 # sir plot simulated with mcmc parameters
-# setting parameters
-initialSIR = [statePops['NH']-10,10,0]
-params = (float(columnToNumpyArray(samplesMeans.where("state=`NH`").select("beta"), 'beta')),
-    float(columnToNumpyArray(samplesMeans.where("state=`NH`").select("gamma"), 'gamma')))
-days = 700
-# executing simulation
-sim = simulateSIR(initialSIR, params, days)
-tableSim = dataFrameToTable(sim).update("Time = i")
 #plotting results
-simPlot = (Plot.plot("Susceptible", tableSim, 'Time', "S").
+stateSelSim = Plot.oneClick(simTable, 'state')
+simPlot = (Plot.plot("Susceptible", stateSelSim, 'time', "S").
     plotStyle("Scatter").
-    plot("Infected", tableSim, "Time", "I").
+    plot("Infected", stateSelSim, "time", "I").
     plotStyle("Scatter").
-    plot("Removed", tableSim, "Time", "R").
+    plot("Removed", stateSelSim, "time", "R").
     plotStyle("Scatter").
     chartTitle("SIR Simulation").
     xLabel("Time").
